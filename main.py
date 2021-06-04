@@ -12,6 +12,7 @@ from evaluate.bc5 import evaluate_bc5
 
 def main_knowledge_base():
     if constants.IS_REBUILD == 1:
+        print('Build data...')
         # make_chemicals()
         # make_diseases()
         # make_relations()
@@ -21,6 +22,7 @@ def main_knowledge_base():
         val_dict = make_pickle(constants.ENTITY_PATH + 'valid2id.txt', constants.PICKLE + 'val_triple_data.pkl')
         test_dict = make_pickle(constants.ENTITY_PATH + 'test2id.txt', constants.PICKLE + 'test_triple_data.pkl')
     else:
+        print('Load data...')
         with open(constants.PICKLE + 'train_triple_data.pkl', 'rb') as f:
             train_dict = pickle.load(f)
             f.close()
@@ -30,11 +32,18 @@ def main_knowledge_base():
         with open(constants.PICKLE + 'test_triple_data.pkl', 'rb') as f:
             test_dict = pickle.load(f)
 
-    transe = TransEModel(model_path=constants.TRAINED_MODELS, batch_size=256, epochs=constants.EPOCHS)
-    transe.build()
-    transe.load_data(train_dict, val_dict)
-    transe.train()
-    transe.save_model()
+    print("Train shape: ", len(train_dict['head']))
+    print("Test shape: ", len(test_dict['head']))
+    print("Validation shape: ", len(val_dict['head']))
+
+    embeddings = get_trimmed_w2v_vectors(constants.TRIMMED_W2V)
+
+    with tf.device('/device:GPU:0'):
+
+        transe = TransEModel(embeddings=embeddings, model_path=constants.TRAINED_MODELS, batch_size=32,
+                             epochs=100, score=constants.SCORE)
+        transe.build(train_dict, val_dict)
+        transe.train(early_stopping=False)
 
 
 def main_re():

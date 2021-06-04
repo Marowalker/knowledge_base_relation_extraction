@@ -6,6 +6,7 @@ import numpy as np
 from relation_extraction.dataset import pad_sequences
 import os
 from sklearn.utils import shuffle
+from sklearn.metrics import f1_score
 import keras.backend as K
 
 
@@ -53,7 +54,7 @@ class REModel:
         self.num_of_siblings = count_vocab(constants.ALL_WORDS)
         self.num_of_class = len(constants.ALL_LABELS)
         self.trained_models = constants.TRAINED_MODELS
-        self.initializer = tf.initializers.glorot_normal()
+        self.initializer = tf.keras.initializers.GlorotNormal()
 
     def _add_inputs(self):
         # self.labels = tf.keras.Input(name="labels", shape=(None, ), dtype='int32')
@@ -94,18 +95,28 @@ class REModel:
         self.sibling_embeddings = tf.nn.embedding_lookup(params=embedding_wd, ids=self.sibling_ids)
         self.sibling_embeddings = tf.nn.dropout(self.sibling_embeddings, constants.DROPOUT)
 
-        # embedding_wd = tf.concat([embedding_wd, embeddings_re], axis=0)
+        embedding_wd = tf.concat([embedding_wd, embeddings_re], axis=0)
 
         # Lookup from indexs to vectors of words and dependency relations
         self.word_embeddings = tf.nn.embedding_lookup(params=embedding_wd, ids=self.word_ids)
         self.word_embeddings = tf.nn.dropout(self.word_embeddings, constants.DROPOUT)
-
 
         # Create pos tag embeddings randomly
         dummy_emb_2 = tf.Variable(np.zeros((1, 6)), name='dummy_2', dtype=tf.float32)
         embeddings_pos = tf.Variable(self.initializer(shape=[self.num_of_pos + 1, 6], dtype=tf.float32), name='pos_lut',
                                      trainable=True)
         embeddings_pos = tf.concat([dummy_emb_2, embeddings_pos], axis=0)
+        # Create dependency relations randomly
+        embeddings_re2 = tf.Variable(self.initializer(shape=[self.num_of_depend + 1, 6],
+                                                     dtype=tf.float32), name="re_lut2")
+        # create direction vectors randomly
+        embedding_dir2 = tf.Variable(self.initializer(shape=[3, 6], dtype=tf.float32),
+                                    name="dir_lut2")
+        # Concat dummy vector and relations vectors
+        embeddings_re2 = tf.concat([dummy_emb_2, embeddings_re2], axis=0)
+        # Concat relation vectors and direction vectors
+        embeddings_re2 = tf.concat([embeddings_re2, embedding_dir2], axis=0)
+        embeddings_pos = tf.concat([embeddings_pos, embeddings_re2], axis=0)
         self.pos_embeddings = tf.nn.embedding_lookup(params=embeddings_pos, ids=self.pos_ids)
         self.pos_embeddings = tf.nn.dropout(self.pos_embeddings, constants.DROPOUT)
 
@@ -114,6 +125,16 @@ class REModel:
         embeddings_synset = tf.Variable(self.initializer(shape=[self.num_of_synset + 1, 13], dtype=tf.float32),
                                         name='syn_lut', trainable=True)
         embeddings_synset = tf.concat([dummy_emb_4, embeddings_synset], axis=0)
+        # Create dependency relations randomly
+        embeddings_re4 = tf.Variable(self.initializer(shape=[self.num_of_depend + 1, 13], dtype=tf.float32),
+                                     name="re_lut4")
+        # create direction vectors randomly
+        embedding_dir4 = tf.Variable(self.initializer(shape=[3, 13], dtype=tf.float32), name="dir_lut4")
+        # Concat dummy vector and relations vectors
+        embeddings_re4 = tf.concat([dummy_emb_4, embeddings_re4], axis=0)
+        # Concat relation vectors and direction vectors
+        embeddings_re4 = tf.concat([embeddings_re4, embedding_dir4], axis=0)
+        embeddings_synset = tf.concat([embeddings_synset, embeddings_re4], axis=0)
         self.synset_embeddings = tf.nn.embedding_lookup(params=embeddings_synset, ids=self.synset_ids)
         self.synset_embeddings = tf.nn.dropout(self.synset_embeddings, constants.DROPOUT)
 
@@ -156,50 +177,50 @@ class REModel:
         cnn_outputs = []
         for k in constants.CNN_FILTERS:
             filters = constants.CNN_FILTERS[k]
-            cnn_output_w = tf.keras.layers.Conv2D(
+            cnn_output_w = tf.keras.layers.Conv1D(
                 filters=filters,
-                kernel_size=(k, constants.INPUT_W2V_DIM),
-                strides=(1, 1),
+                kernel_size=constants.INPUT_W2V_DIM,
+                strides=1,
                 activation='tanh',
                 use_bias=False, padding="valid",
                 kernel_initializer=tf.keras.initializers.GlorotNormal(),
                 kernel_regularizer=tf.keras.regularizers.l2(1e-4)
             )(self.word_embeddings)
 
-            cnn_output_sb = tf.keras.layers.Conv2D(
+            cnn_output_sb = tf.keras.layers.Conv1D(
                 filters=filters,
-                kernel_size=(k, constants.INPUT_W2V_DIM),
-                strides=(1, 1),
+                kernel_size=constants.INPUT_W2V_DIM,
+                strides=1,
                 activation='tanh',
                 use_bias=False, padding="valid",
                 kernel_initializer=tf.keras.initializers.GlorotNormal(),
                 kernel_regularizer=tf.keras.regularizers.l2(1e-4)
             )(self.sibling_embeddings)
 
-            cnn_output_pos = tf.keras.layers.Conv2D(
+            cnn_output_pos = tf.keras.layers.Conv1D(
                 filters=filters,
-                kernel_size=(k, 6),
-                strides=(1, 1),
+                kernel_size=6,
+                strides=1,
                 activation='tanh',
                 use_bias=False, padding="valid",
                 kernel_initializer=tf.keras.initializers.GlorotNormal(),
                 kernel_regularizer=tf.keras.regularizers.l2(1e-4)
             )(self.pos_embeddings)
 
-            cnn_output_synset = tf.keras.layers.Conv2D(
+            cnn_output_synset = tf.keras.layers.Conv1D(
                 filters=filters,
-                kernel_size=(k, 13),
-                strides=(1, 1),
+                kernel_size=13,
+                strides=1,
                 activation='tanh',
                 use_bias=False, padding="valid",
                 kernel_initializer=tf.keras.initializers.GlorotNormal(),
                 kernel_regularizer=tf.keras.regularizers.l2(1e-4)
             )(self.synset_embeddings)
 
-            cnn_output_position = tf.keras.layers.Conv2D(
+            cnn_output_position = tf.keras.layers.Conv1D(
                 filters=filters,
-                kernel_size=(k, 50),
-                strides=(1, 1),
+                kernel_size=50,
+                strides=1,
                 activation='tanh',
                 use_bias=False, padding="valid",
                 kernel_initializer=tf.keras.initializers.GlorotNormal(),
@@ -239,13 +260,11 @@ class REModel:
         )(hidden_2)
         self.model = tf.keras.Model(inputs=[self.word_ids, self.sibling_ids, self.pos_ids, self.synset_ids,
                                             self.positions_1, self.positions_2, self.relations], outputs=self.outputs)
-        self.model.compile(optimizer=self.optimizer, loss='binary_crossentropy', metrics='accuracy')
+        # self.model.compile(optimizer=self.optimizer, loss='binary_crossentropy', metrics='accuracy')
 
     def _add_metrics(self):
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
         self.loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-        self.train_metric = tf.metrics.BinaryAccuracy()
-        self.val_metric = tf.metrics.BinaryAccuracy()
 
     def build(self, train_data, val_data, test_data):
         timer = Timer()
@@ -310,6 +329,18 @@ class REModel:
             word_relation_ids[:, w_ids] = word_ids
             word_relation_ids[:, rel_idxs] = new_relation_ids
 
+            # Create index matrix with pos tags and dependency relations between pos tags
+            new_relation_ids = self.num_of_pos + 1 + relation_ids + directions
+            pos_relation_ids = np.zeros((pos_ids.shape[0], pos_ids.shape[1] + new_relation_ids.shape[1]))
+            pos_relation_ids[:, w_ids] = pos_ids
+            pos_relation_ids[:, rel_idxs] = new_relation_ids
+
+            # Create index matrix with synsets and dependency relations between synsets
+            new_relation_ids = self.num_of_synset + 1 + relation_ids + directions
+            synset_relation_ids = np.zeros((synset_ids.shape[0], synset_ids.shape[1] + new_relation_ids.shape[1]))
+            synset_relation_ids[:, w_ids] = synset_ids
+            synset_relation_ids[:, rel_idxs] = new_relation_ids
+
             # Create index matrix with positions and dependency relations between positions
             new_relation_ids = self.max_length + 1 + relation_ids + directions
             positions_1_relation_ids = np.zeros(
@@ -325,11 +356,11 @@ class REModel:
 
             start += self.batch_size
             idx += 1
-            yield positions_1_relation_ids, positions_2_relation_ids, word_relation_ids, sibling_ids, pos_ids, \
+            yield positions_1_relation_ids, positions_2_relation_ids, word_relation_ids, sibling_ids, pos_relation_ids, \
                 synset_ids, relation_ids, labels
 
     def train(self, early_stopping=True, patience=10):
-        best_acc = 0
+        best_f1 = 0
         n_epoch_no_improvement = 0
         num_batch_train = len(self.dataset_train.labels) // self.batch_size + 1
         for e in range(constants.EPOCHS):
@@ -365,19 +396,15 @@ class REModel:
                 with tf.GradientTape() as tape:
                     logits = self.model(features, training=True)
                     loss_value = self.loss(labels, logits)
+                    loss_value += sum(self.model.losses)
                 grads = tape.gradient(loss_value, self.model.trainable_weights)
                 self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
-                self.train_metric.update_state(labels, logits)
                 # Log every 200 batches.
                 if idx % 10 == 0:
                     Log.log("Iter {}, Loss: {} ".format(idx, loss_value))
 
-            train_acc = self.train_metric.result()
-            print("Training acc over epoch: {}".format(float(train_acc)))
-
-            self.train_metric.reset_states()
-
             if early_stopping:
+                total_f1 = []
                 num_batch_val = len(self.dataset_val.labels) // self.batch_size + 1
 
                 data = {
@@ -395,31 +422,44 @@ class REModel:
                 for idx, batch in enumerate(self._next_batch(data=data, num_batch=num_batch_val)):
                     positions_1, positions_2, word_ids, sibling_ids, pos_ids, synset_ids, relation_ids, labels = batch
                     features = [word_ids, sibling_ids, pos_ids, synset_ids, positions_1, positions_2, relation_ids]
-                    val_logits = self.model(features, training=False)
+                    val_acc, f1 = self._accuracy(features, labels)
+                    total_f1.append(f1)
 
-                    self.val_metric.update_state(labels, val_logits)
-
-                val_acc = float(self.val_metric.result())
-
-                print("Validation acc for epoch number {}: {}".format(e + 1, val_acc))
-
-                if val_acc > best_acc:
-                    Log.log('Save the model at epoch {}'.format(e + 1))
+                val_f1 = np.mean(total_f1)
+                Log.log("F1: {}".format(val_f1))
+                print("Best F1: ", best_f1)
+                print("F1 for epoch number {}: {}".format(e + 1, val_f1))
+                if val_f1 > best_f1:
                     self.model.save_weights(self.model_path)
-                    best_acc = val_acc
+                    Log.log('Save the model at epoch {}'.format(e + 1))
+                    best_f1 = val_f1
                     n_epoch_no_improvement = 0
-
                 else:
                     n_epoch_no_improvement += 1
                     Log.log("Number of epochs with no improvement: {}".format(n_epoch_no_improvement))
                     if n_epoch_no_improvement >= patience:
-                        print("Best accuracy: {}".format(val_acc))
+                        print("Best F1: {}".format(best_f1))
                         break
-
-                self.val_metric.reset_states()
 
         if not early_stopping:
             self.model.save_weights(self.model_path)
+
+    def _accuracy(self, features, labels):
+
+        logits = self.model(features, training=False)
+        accuracy = []
+        f1 = []
+        predict = []
+        exclude_label = []
+        for logit, label in zip(logits, labels):
+            logit = np.argmax(logit)
+            label = np.argmax(label)
+            exclude_label.append(label)
+            predict.append(logit)
+            accuracy += [logit == label]
+
+        f1.append(f1_score(predict, exclude_label, average='macro'))
+        return accuracy, np.mean(f1)
 
     def predict(self):
         y_pred = []
@@ -444,13 +484,9 @@ class REModel:
             features = [word_ids, sibling_ids, pos_ids, synset_ids, positions_1, positions_2, relation_ids]
             logits = self.model(features, training=False)
 
-            self.val_metric.update_state(labels, logits)
-
             for logit in logits:
                 decode_sequence = np.argmax(logit)
                 y_pred.append(decode_sequence)
-
-        self.val_metric.reset_states()
 
         return y_pred
 

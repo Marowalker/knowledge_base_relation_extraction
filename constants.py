@@ -3,12 +3,13 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Knowledge-based NLP model for re')
 parser.add_argument('-i', help='Job identity', type=int, default=0)
-parser.add_argument('-rb', help='Rebuild data', type=int, default=1)
+parser.add_argument('-rb', help='Rebuild data', type=int, default=0)
 parser.add_argument('-e', help='Number of epochs', type=int, default=80)
 parser.add_argument('-p', help='Patience of early stop (0 to ignore)', type=int, default=10)
 parser.add_argument('-len', help='Max sentence or document length', type=int, default=100)
 parser.add_argument('-d', help='dropout rate', type=int, default=0.5)
 parser.add_argument('-config', help='CNN configurations default \'1:128\'', type=str, default='2:32,3:96,4:32,5:64')
+parser.add_argument('-sc', help='scoring function for TransE', type=str, default='l1')
 
 opt = parser.parse_args()
 print('Running opt: {}'.format(opt))
@@ -20,6 +21,7 @@ EARLY_STOPPING = False if opt.p == 0 else True
 MAX_LENGTH = opt.len
 DROPOUT = opt.d
 PATIENCE = opt.p
+SCORE = opt.sc
 
 CNN_FILTERS = {}
 if opt.config:
@@ -52,10 +54,6 @@ PICKLE = DATA + 'pickle/'
 cdr_datasets = ['train.txt', 'dev.txt', 'test.txt']
 
 ENTITY_PATH = DATA + 'entity_representation/'
-
-ENTITY_DIM = 200
-
-RELATION_DIM = 200
 
 INPUT_W2V_DIM = 200
 
