@@ -66,9 +66,9 @@ class TransEModel:
     #     self.loss = tf.reduce_sum(input_tensor=tf.maximum(0.0, 1.0 + score_pos - score_neg), name='max_margin_loss')
 
     def _add_model(self):
-        self.model = tf.keras.Model(inputs=[self.head, self.tail, self.rel, self.head_neg, self.tail_neg],
-                                    outputs=[self.head_lookup, self.tail_lookup, self.rel_lookup, self.head_neg_lookup,
-                                             self.tail_neg_lookup])
+        self.model = tf.keras.Model(inputs=(self.head, self.tail, self.rel, self.head_neg, self.tail_neg),
+                                    outputs=(self.head_lookup, self.tail_lookup, self.rel_lookup, self.head_neg_lookup,
+                                             self.tail_neg_lookup))
 
     def build(self, data_train, data_val):
         self._add_inputs()
@@ -115,7 +115,7 @@ class TransEModel:
                     head_shuffled, tail_shuffled, rel_shuffled, head_neg_shufled, tail_neg_shuffled, num_batch_train)):
                 head, tail, rel, head_neg, tail_neg = batch
                 with tf.GradientTape() as tape:
-                    logits = self.model([head, tail, rel, head_neg, tail_neg], training=True)
+                    logits = self.model((head, tail, rel, head_neg, tail_neg), training=True)
                     # self._add_loss()
                     h, t, r, h_n, t_n = logits
                     score_pos = self.score_function(h, t, r)

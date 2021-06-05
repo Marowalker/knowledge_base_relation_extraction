@@ -40,8 +40,8 @@ def main_knowledge_base():
 
     with tf.device('/device:GPU:0'):
 
-        transe = TransEModel(embeddings=embeddings, model_path=constants.TRAINED_MODELS, batch_size=32,
-                             epochs=100, score=constants.SCORE)
+        transe = TransEModel(embeddings=embeddings, model_path=constants.TRAINED_MODELS, batch_size=64,
+                             epochs=25, score=constants.SCORE)
         transe.build(train_dict, val_dict)
         transe.train(early_stopping=False)
 
@@ -118,5 +118,5 @@ def main_re():
 
 
 if __name__ == '__main__':
-    # main_knowledge_base()
-    main_re()
+    main_knowledge_base()
+    # main_re()

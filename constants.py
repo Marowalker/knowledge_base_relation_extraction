@@ -9,7 +9,7 @@ parser.add_argument('-p', help='Patience of early stop (0 to ignore)', type=int,
 parser.add_argument('-len', help='Max sentence or document length', type=int, default=100)
 parser.add_argument('-d', help='dropout rate', type=int, default=0.5)
 parser.add_argument('-config', help='CNN configurations default \'1:128\'', type=str, default='2:32,3:96,4:32,5:64')
-parser.add_argument('-sc', help='scoring function for TransE', type=str, default='l1')
+parser.add_argument('-sc', help='scoring function for TransE', type=str, default='l2')
 
 opt = parser.parse_args()
 print('Running opt: {}'.format(opt))
