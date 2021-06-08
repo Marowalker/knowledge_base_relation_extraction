@@ -142,6 +142,7 @@ def make_triples():
     file = open(CTD)
     ctd = csv.reader(file)
     # ctd triples
+    print("Making CTD triples...")
     for row in ctd:
         if not search_sharp(row):
             chem_disease = tuple([row[1], clean_disease(row[4])])
@@ -154,6 +155,7 @@ def make_triples():
     file.close()
 
     # cdr triples
+    print("Making CDR triples...")
     chemicals = defaultdict(list)
     diseases = defaultdict(list)
     relations = defaultdict(list)
@@ -179,9 +181,11 @@ def make_triples():
                     abstracts.append(rel_line[0])
                     relations[rel_line[0]].append(tuple([rel_line[2], rel_line[3]]))
 
+    print("Adding new CDR triples to list...")
     for abstract in abstracts:
-        # chems = chemicals[abstract]
-        # dises = diseases[abstract]
+        print("Processing abstract", abstract)
+        chems = chemicals[abstract]
+        dises = diseases[abstract]
         rels = relations[abstract]
 
         for (chem_id, dis_id) in rels:
@@ -189,7 +193,6 @@ def make_triples():
                 triple = tuple([chem_id, dis_id, list_relations.index('marker/mechanism')])
                 # else:
                 #     triple = tuple([chem_id, dis_id, list_relations.index('other')])
-                print(triple)
                 triples.append(triple)
 
     triples_set = set(triples)

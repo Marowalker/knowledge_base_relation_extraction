@@ -3,7 +3,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Knowledge-based NLP model for re')
 parser.add_argument('-i', help='Job identity', type=int, default=0)
-parser.add_argument('-rb', help='Rebuild data', type=int, default=0)
+parser.add_argument('-rb', help='Rebuild data', type=int, default=1)
 parser.add_argument('-e', help='Number of epochs', type=int, default=80)
 parser.add_argument('-p', help='Patience of early stop (0 to ignore)', type=int, default=10)
 parser.add_argument('-len', help='Max sentence or document length', type=int, default=100)
