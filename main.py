@@ -6,6 +6,7 @@ from knowledge_base.transE import TransEModel
 from relation_extraction.utils import load_vocab, get_trimmed_w2v_vectors
 from relation_extraction.dataset import Dataset
 from relation_extraction.re_model import REModel
+# from relation_extraction.model_cnn_upgraded import CnnModel
 import tensorflow as tf
 from evaluate.bc5 import evaluate_bc5
 
@@ -91,12 +92,33 @@ def main_re():
     # Get word embeddings
     embeddings = get_trimmed_w2v_vectors(constants.TRIMMED_W2V)
 
+    # model_re = CnnModel(model_name=constants.TRAINED_MODELS + 're/', embeddings=embeddings, batch_size=256)
+    # model_re.build()
+    # model_re.load_data(train=train, validation=validation)
+    # model_re.run_train(epochs=constants.EPOCHS, early_stopping=True, patience=constants.PATIENCE)
+    #
+    # answer = {}
+    # identities = test.identities
+    # y_pred = model_re.predict(test)
+    #
+    # # print(identities)
+    # for i in range(len(y_pred)):
+    #     if y_pred[i] == 0:
+    #         if identities[i][0] not in answer:
+    #             answer[identities[i][0]] = []
+    #
+    #         if identities[i][1] not in answer[identities[i][0]]:
+    #             answer[identities[i][0]].append(identities[i][1])
+    #
+    # print(
+    #     'result: abstract: ', evaluate_bc5(answer)
+    # )
+
     with tf.device('/device:GPU:0'):
 
         model_re = REModel(constants.TRAINED_MODELS + 're/', embeddings, 256)
         model_re.build(train, validation, test)
-        # print(model_re.model.trainable_variables)
-        model_re.train(early_stopping=constants.EARLY_STOPPING, patience=constants.PATIENCE)
+        model_re.train(early_stopping=constants.EARLY_STOPPING, patience=constants.PATIENCE)\
 
         # Test on abstract
         answer = {}

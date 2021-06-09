@@ -18,7 +18,7 @@ class LookupLayer(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.w = self.add_weight('embedding', shape=self.embeddings.shape,
                                  initializer=tf.keras.initializers.GlorotNormal(),
-                                 regularizer=tf.keras.regularizers.l2(1e-4))
+                                 regularizer=tf.keras.regularizers.l2(1e-4), trainable=True)
 
     def call(self, inputs, **kwargs):
         emb = self.embeddings * self.w

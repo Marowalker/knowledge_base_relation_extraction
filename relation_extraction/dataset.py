@@ -92,8 +92,6 @@ class Dataset:
             raw_data = f.readlines()
         data_words, data_siblings, data_postitions, data_y, data_pos, data_synsets, data_relations, \
             data_directions, self.identities = self.parse_raw(raw_data)
-        # data_words, data_postitions, data_y, data_pos, data_synsets, data_relations, data_directions, \
-        #     self.identities = self.parse_raw(raw_data)
 
         words = []
         siblings = []
@@ -137,12 +135,15 @@ class Dataset:
                     word_id = self.vocab_words[constant.UNK]
                 ws.append(word_id)
 
+                temp = []
                 for token_word in sb:
                     if token_word in self.vocab_words:
                         sibling_id = self.vocab_words[token_word]
                     else:
                         sibling_id = self.vocab_words[constant.UNK]
                     sbs.append(sibling_id)
+                    # temp.append(sibling_id)
+                # sbs.append(temp)
 
                 if p in self.vocab_poses:
                     p_id = self.vocab_poses[p]
@@ -161,11 +162,11 @@ class Dataset:
             poses.append(ps)
             synsets.append(ss)
 
-            # lb = constant.ALL_LABELS.index(data_y[i][0])
             if data_y[i][0] == 'CID':
                 lb = [1, 0]
             else:
                 lb = [0, 1]
+            # lb = constant.ALL_LABELS.index(data_y[i][0])
             labels.append(lb)
 
         self.words = words
@@ -238,6 +239,7 @@ class Dataset:
                                 d = dependency[1]
                                 r = r.split(':', 1)[0] + ')' if ':' in r else r
                                 relations.append(r)
+                                # relations.append(dependency)
                                 directions.append(d)
 
                         all_words.append(words)

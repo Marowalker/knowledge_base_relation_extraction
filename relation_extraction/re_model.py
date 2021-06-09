@@ -7,40 +7,40 @@ from relation_extraction.dataset import pad_sequences
 import os
 from sklearn.utils import shuffle
 from sklearn.metrics import f1_score
-import keras.backend as K
 
 
 physical_devices = tf.config.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
-def recall_m(y_true, y_pred):
-    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-    possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
-    recall = true_positives / (possible_positives + K.epsilon())
-    return recall
+class CustomLayer(tf.keras.layers.Layer):
+    def __init__(self, embedding, dropout):
+        super(CustomLayer, self).__init__()
+        # self.embeddings = embeddings
+        self.dropout = dropout
+        self.embedding = embedding
+        self.initializer = tf.keras.initializers.GlorotNormal()
+        self.regularizer = tf.keras.regularizers.l2(1e-4)
 
+    def build(self, input_shape):
+        # self.w = self.add_weight(name='weights', shape=[self.embedding.shape[-1], self.embedding.shape[-1]],
+        #                           dtype=tf.float32, initializer=self.initializer, regularizer=self.regularizer,
+        #                          trainable=True)
+        self.w = self.embedding
 
-def precision_m(y_true, y_pred):
-    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-    predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
-    precision = true_positives / (predicted_positives + K.epsilon())
-    return precision
-
-
-def f1_m(y_true, y_pred):
-    precision = precision_m(y_true, y_pred)
-    recall = recall_m(y_true, y_pred)
-    return 2*((precision*recall)/(precision+recall+K.epsilon()))
+    def call(self, inputs, **kwargs):
+        # weighted_embedding = tf.linalg.matmul(self.embedding, self.w)
+        lookup = tf.nn.embedding_lookup(params=self.w, ids=inputs)
+        return tf.nn.dropout(lookup, self.dropout)
 
 
 class REModel:
-    def __init__(self, model_path, word_emb, batch_size):
+    def __init__(self, model_path, embeddings, batch_size):
         self.trained_models = constants.TRAINED_MODELS
         self.model_path = model_path
         if not os.path.exists(self.trained_models):
             os.makedirs(self.trained_models)
-        self.embeddings = word_emb
+        self.embeddings = embeddings
         self.batch_size = batch_size
 
         self.max_length = constants.MAX_LENGTH
@@ -57,11 +57,10 @@ class REModel:
         self.initializer = tf.keras.initializers.GlorotNormal()
 
     def _add_inputs(self):
-        # self.labels = tf.keras.Input(name="labels", shape=(None, ), dtype='int32')
         # Indexes of first channel (word + dependency relations)
         self.word_ids = tf.keras.Input(name='word_ids', shape=(None,), dtype='int32')
         # Indexes of channel (sibling + dependency relations)
-        self.sibling_ids = tf.keras.Input(name='sibling_ids', shape=(None,), dtype='int32')
+        self.sibling_ids = tf.keras.Input(name='sibling_ids', shape=(None, ), dtype='int32')
         # Indexes of third channel (position + dependency relations)
         self.positions_1 = tf.keras.Input(name='positions_1', shape=(None,), dtype='int32')
         # Indexes of third channel (position + dependency relations)
@@ -90,35 +89,33 @@ class REModel:
         # Create word embedding tf variable
         embedding_wd = tf.Variable(self.embeddings, name="lut", dtype=tf.float32, trainable=False)
         embedding_wd = tf.concat([dummy_eb, embedding_wd], axis=0)
-
-        # Lookup from indexes to vectors of siblings and dependency relations
-        self.sibling_embeddings = tf.nn.embedding_lookup(params=embedding_wd, ids=self.sibling_ids)
-        self.sibling_embeddings = tf.nn.dropout(self.sibling_embeddings, constants.DROPOUT)
-
         embedding_wd = tf.concat([embedding_wd, embeddings_re], axis=0)
 
-        # Lookup from indexs to vectors of words and dependency relations
-        self.word_embeddings = tf.nn.embedding_lookup(params=embedding_wd, ids=self.word_ids)
-        self.word_embeddings = tf.nn.dropout(self.word_embeddings, constants.DROPOUT)
+        # initialize word embedding layer
+        word_emb = CustomLayer(embedding_wd, constants.DROPOUT)
+        self.word_embeddings = word_emb(self.word_ids)
+
+        self.sibling_embeddings = word_emb(self.sibling_ids)
 
         # Create pos tag embeddings randomly
         dummy_emb_2 = tf.Variable(np.zeros((1, 6)), name='dummy_2', dtype=tf.float32)
-        embeddings_pos = tf.Variable(self.initializer(shape=[self.num_of_pos + 1, 6], dtype=tf.float32), name='pos_lut',
-                                     trainable=True)
+        embeddings_pos = tf.Variable(self.initializer(shape=[self.num_of_pos + 1, 6], dtype=tf.float32), name='pos_lut'
+                                     , trainable=True)
         embeddings_pos = tf.concat([dummy_emb_2, embeddings_pos], axis=0)
         # Create dependency relations randomly
-        embeddings_re2 = tf.Variable(self.initializer(shape=[self.num_of_depend + 1, 6],
-                                                     dtype=tf.float32), name="re_lut2")
+        embeddings_re2 = tf.Variable(self.initializer(shape=[self.num_of_depend + 1, 6], dtype=tf.float32),
+                                     name="re_lut2")
         # create direction vectors randomly
-        embedding_dir2 = tf.Variable(self.initializer(shape=[3, 6], dtype=tf.float32),
-                                    name="dir_lut2")
+        embedding_dir2 = tf.Variable(self.initializer(shape=[3, 6], dtype=tf.float32), name="dir_lut2")
         # Concat dummy vector and relations vectors
         embeddings_re2 = tf.concat([dummy_emb_2, embeddings_re2], axis=0)
         # Concat relation vectors and direction vectors
         embeddings_re2 = tf.concat([embeddings_re2, embedding_dir2], axis=0)
         embeddings_pos = tf.concat([embeddings_pos, embeddings_re2], axis=0)
-        self.pos_embeddings = tf.nn.embedding_lookup(params=embeddings_pos, ids=self.pos_ids)
-        self.pos_embeddings = tf.nn.dropout(self.pos_embeddings, constants.DROPOUT)
+
+        # initialize pos embedding layer
+        pos_emb = CustomLayer(embeddings_pos, constants.DROPOUT)
+        self.pos_embeddings = pos_emb(self.pos_ids)
 
         # Create synset embeddings randomly
         dummy_emb_4 = tf.Variable(np.zeros((1, 13)), name='dummy_4', dtype=tf.float32)
@@ -135,8 +132,10 @@ class REModel:
         # Concat relation vectors and direction vectors
         embeddings_re4 = tf.concat([embeddings_re4, embedding_dir4], axis=0)
         embeddings_synset = tf.concat([embeddings_synset, embeddings_re4], axis=0)
-        self.synset_embeddings = tf.nn.embedding_lookup(params=embeddings_synset, ids=self.synset_ids)
-        self.synset_embeddings = tf.nn.dropout(self.synset_embeddings, constants.DROPOUT)
+
+        # initialize synset embedding layer
+        synset_emb = CustomLayer(embeddings_synset, constants.DROPOUT)
+        self.synset_embeddings = synset_emb(self.synset_ids)
 
         # Create position embeddings randomly, each vector has length of WORD EMBEDDINGS / 2
         embeddings_position = tf.Variable(self.initializer(shape=[self.max_length * 2, 25], dtype=tf.float32),
@@ -156,17 +155,18 @@ class REModel:
                                          axis=0)  # :int(constants.INPUT_W2V_DIM / 2)]], axis=0)
         embeddings_position2 = tf.concat([embeddings_position, embeddings_re3[:, 25:]],
                                          axis=0)  # int(constants.INPUT_W2V_DIM / 2):]], axis=0)
-        # Lookup concatenated indexes vectors to create concatenated embedding vectors
-        self.position_embeddings_1 = tf.nn.embedding_lookup(params=embeddings_position1, ids=self.positions_1)
-        self.position_embeddings_1 = tf.nn.dropout(self.position_embeddings_1, constants.DROPOUT)
-        self.position_embeddings_2 = tf.nn.embedding_lookup(params=embeddings_position2, ids=self.positions_2)
-        self.position_embeddings_2 = tf.nn.dropout(self.position_embeddings_2, constants.DROPOUT)
 
-        # Concat 2 position feature into single feature (third channel)
+        # initialize position embeddings
+        position_emb_1 = CustomLayer(embeddings_position1, constants.DROPOUT)
+        position_emb_2 = CustomLayer(embeddings_position2, constants.DROPOUT)
+
+        self.position_embeddings_1 = position_emb_1(self.positions_1)
+        self.position_embeddings_2 = position_emb_2(self.positions_2)
+
         self.position_embeddings = tf.concat([self.position_embeddings_1, self.position_embeddings_2], axis=-1)
 
     def _multiple_input_cnn_layers(self):
-        # Create 4-channel features
+        # Create 5-channel features
         self.word_embeddings = tf.expand_dims(self.word_embeddings, -1)
         self.sibling_embeddings = tf.expand_dims(self.sibling_embeddings, -1)
         self.pos_embeddings = tf.expand_dims(self.pos_embeddings, -1)
@@ -260,7 +260,6 @@ class REModel:
         )(hidden_2)
         self.model = tf.keras.Model(inputs=[self.word_ids, self.sibling_ids, self.pos_ids, self.synset_ids,
                                             self.positions_1, self.positions_2, self.relations], outputs=self.outputs)
-        # self.model.compile(optimizer=self.optimizer, loss='binary_crossentropy', metrics='accuracy')
 
     def _add_metrics(self):
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
@@ -364,7 +363,7 @@ class REModel:
         n_epoch_no_improvement = 0
         num_batch_train = len(self.dataset_train.labels) // self.batch_size + 1
         for e in range(constants.EPOCHS):
-            print("\nStart of epoch %d" % (e,))
+            print("\nStart of epoch %d" % (e + 1,))
 
             words_shuffled, siblings_shuffled, positions_1_shuffle, positions_2_shuffle, poses_shuffled, \
             synset_shuffled, relations_shuffled, directions_shuffled, labels_shuffled = shuffle(
@@ -426,8 +425,7 @@ class REModel:
                     total_f1.append(f1)
 
                 val_f1 = np.mean(total_f1)
-                Log.log("F1: {}".format(val_f1))
-                print("Best F1: ", best_f1)
+                print("Current best F1: ", best_f1)
                 print("F1 for epoch number {}: {}".format(e + 1, val_f1))
                 if val_f1 > best_f1:
                     self.model.save_weights(self.model_path)
@@ -446,7 +444,7 @@ class REModel:
 
     def _accuracy(self, features, labels):
 
-        logits = self.model(features, training=False)
+        logits = self.model(features, training=True)
         accuracy = []
         f1 = []
         predict = []
